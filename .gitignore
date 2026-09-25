@@ -1,0 +1,18 @@
+# 官方参考源码不入库：这是你的作业，不是 Karpathy 的
+_reference_nanoGPT/
+
+# 数据与权重
+data/
+ckpt/
+*.pt
+*.bin
+
+# Python
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+.venv/
+venv/
+
+# macOS
+.DS_Store

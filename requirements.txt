@@ -1,0 +1,4 @@
+torch>=2.0
+numpy>=1.24
+tiktoken>=0.5          # 仅用于对照 GPT-2 官方分词结果，跟写阶段不允许用它替代自写分词器
+matplotlib>=3.7        # 画 loss 曲线
