@@ -69,18 +69,36 @@ nanoGPT 的 `model.py` 只有 331 行，却完整包含：
 | W3 | ✅ | Pre-LN 生效；与 Post-LN 的首层梯度范数对比 1.22e-01 vs 3.84e-07 |
 | W4 | ✅ | GPT-2 small **123,689,472** 参数；`wte` 与 `lm_head` 权重绑定 |
 | W5 | ✅ | BPE / 字符级分词 encode-decode 往返一致 |
-| W6 | ✅ | CPU 小模型 loss 4.12 → 2.10（500 iters） |
-| W7 | ✅ | 采样 200 token；T=0.3/top_k=1 出现预期的「复读机」现象 |
+| W6 | ✅ | CPU 6层/192维 2000 iters：loss 4.07 → 1.38（val 1.59） |
+| W7 | ✅ | 采样 200 token，角色名/标点/换行均正确；T=0.3/top_k=1 出现预期的「复读机」现象 |
 | W8 | ⏳ | 待写 |
 
 一键复验：
 
 ```bash
 python verify_all.py                      # W1–W5，约 30 秒
-python -u 03_训练/train.py --device cpu --n_layer 4 --n_head 4 --n_embd 128 \
-    --block_size 64 --batch_size 16 --max_iters 500 --eval_interval 100   # W6
+python -u 03_训练/train.py --device cpu --n_layer 6 --n_head 6 --n_embd 192 \
+    --block_size 128 --batch_size 16 --max_iters 2000 --eval_interval 250   # W6，CPU 约 9 分钟
 python 04_生成/sample.py --device cpu --max_new_tokens 200 --temperature 0.8 --top_k 20
 ```
+
+W6/W7 实测样本（6 层 / 192 维 / 2000 iters，CPU 8 分 44 秒，loss 4.07 → 1.38）：
+
+```
+ROMEO:
+Ay, County Margarence the odday, from hath your
+For mind-day a matter wall!
+
+GLOUCESTER:
+True-for his breath, who that maids a man
+Intend by and glad one arrivillain is but being!
+
+DUCHESS OF YORK:
+H
+```
+
+对照实验：`--temperature 0.3 --top_k 1`（贪心）会退化成 `the the the the the...`，
+正是「T 过低 → 复读机」的教科书现象，值得亲手跑一次体会。
 
 > 环境提示：`raw.githubusercontent.com` 在国内常超时，语料下载已改为
 > **jsdelivr CDN 优先 + 原站兜底 + 内置语料保底**（见 `train.py` 的 `DATA_URLS`）。
