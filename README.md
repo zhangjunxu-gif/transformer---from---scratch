@@ -39,6 +39,9 @@ nanoGPT 的 `model.py` 只有 331 行，却完整包含：
 │   └── train.py                  ★ 第五至六周：训练循环、余弦退火、梯度裁剪
 ├── 04_生成/
 │   └── sample.py                 ★ 第七周：温度 / top-k 采样
+├── verify_all.py                 ★ W1–W5 一键验收（不训练，CPU 30 秒跑完）
+├── data/                          ← 语料（.gitignore 排除）
+├── ckpt/                          ← 权重（.gitignore 排除）
 └── _reference_nanoGPT/            ← 官方源码（已在 .gitignore 中排除）
 ```
 
@@ -56,6 +59,31 @@ nanoGPT 的 `model.py` 只有 331 行，却完整包含：
 | W6 | 训练循环 | `train.py`：AdamW 分组、余弦退火、Grad Clip | loss 曲线正常下降并保存 checkpoint |
 | W7 | 采样与评估 | `sample.py`：温度 + top-k | 生成 200 token 通顺样本 |
 | W8 | 复现实验与写作 | README 补齐 + 一篇中文技术博客 | 博客可作为套磁附件 |
+
+### 当前进度（2026-09-27 实测）
+
+| 周次 | 状态 | 实测证据 |
+|---|---|---|
+| W1 | ✅ | `attention_from_scratch.py` 自测 4 项全绿 |
+| W2 | ✅ | `verify_all.py`：扰动未来 token，输出偏差 0.00e+00 |
+| W3 | ✅ | Pre-LN 生效；与 Post-LN 的首层梯度范数对比 1.22e-01 vs 3.84e-07 |
+| W4 | ✅ | GPT-2 small **123,689,472** 参数；`wte` 与 `lm_head` 权重绑定 |
+| W5 | ✅ | BPE / 字符级分词 encode-decode 往返一致 |
+| W6 | ✅ | CPU 小模型 loss 4.12 → 2.10（500 iters） |
+| W7 | ✅ | 采样 200 token；T=0.3/top_k=1 出现预期的「复读机」现象 |
+| W8 | ⏳ | 待写 |
+
+一键复验：
+
+```bash
+python verify_all.py                      # W1–W5，约 30 秒
+python -u 03_训练/train.py --device cpu --n_layer 4 --n_head 4 --n_embd 128 \
+    --block_size 64 --batch_size 16 --max_iters 500 --eval_interval 100   # W6
+python 04_生成/sample.py --device cpu --max_new_tokens 200 --temperature 0.8 --top_k 20
+```
+
+> 环境提示：`raw.githubusercontent.com` 在国内常超时，语料下载已改为
+> **jsdelivr CDN 优先 + 原站兜底 + 内置语料保底**（见 `train.py` 的 `DATA_URLS`）。
 
 ---
 

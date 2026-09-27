@@ -30,17 +30,49 @@ from model import GPT, GPTConfig   # noqa: E402
 # ---------------------------------------------------------------------------
 # 1. 数据：默认用 nanoGPT 同款莎士比亚数据集
 # ---------------------------------------------------------------------------
-DATA_URL = "https://raw.githubusercontent.com/karpathy/char-rnn/master/data/tinyshakespeare/input.txt"
+# 多个镜像按顺序尝试：raw.githubusercontent.com 在国内经常直接超时，
+# jsdelivr（GitHub 文件的 CDN）通常可达。全部失败时用内置兜底语料，
+# 保证「训练管线本身」永远能在离线环境下被验证。
+DATA_URLS = [
+    "https://cdn.jsdelivr.net/gh/karpathy/char-rnn@master/data/tinyshakespeare/input.txt",
+    "https://raw.githubusercontent.com/karpathy/char-rnn/master/data/tinyshakespeare/input.txt",
+]
 DATA_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "tinyshakespeare.txt")
+DOWNLOAD_TIMEOUT = 20
+
+# 离线兜底语料：结构极简单但「可被学习」（有重复的模式与词法），
+# 足以证明 loss 在下降、采样能出词。注意它不能替代真实语料做效果评估。
+FALLBACK_CORPUS = (
+    "the king and the queen are in the hall . "
+    "the king loves the queen and the queen loves the king . "
+    "to be or not to be , that is the question . "
+    "romeo loves juliet and juliet loves romeo . "
+    "the fox runs and the dog barks and the bird sings . "
+) * 400
 
 
 def get_data() -> str:
+    if os.path.exists(DATA_PATH) and os.path.getsize(DATA_PATH) > 1000:
+        with open(DATA_PATH, "r", encoding="utf-8") as f:
+            return f.read()
+
     os.makedirs(os.path.dirname(DATA_PATH), exist_ok=True)
-    if not os.path.exists(DATA_PATH):
-        print("下载 tinyshakespeare 数据集 ...")
-        urllib.request.urlretrieve(DATA_URL, DATA_PATH)
-    with open(DATA_PATH, "r", encoding="utf-8") as f:
-        return f.read()
+    for url in DATA_URLS:
+        try:
+            print(f"下载语料：{url}")
+            with urllib.request.urlopen(url, timeout=DOWNLOAD_TIMEOUT) as r:
+                text = r.read().decode("utf-8")
+            if len(text) < 1000:
+                raise ValueError(f"内容过短（{len(text)} 字节），疑似无效响应")
+            with open(DATA_PATH, "w", encoding="utf-8") as f:
+                f.write(text)
+            print(f"已保存 {len(text):,} 字符 → {DATA_PATH}")
+            return text
+        except Exception as e:                       # 超时 / DNS / 代理失败都算
+            print(f"  失败（{type(e).__name__}: {e}），换下一个镜像")
+
+    print("[警告] 所有镜像均不可达，改用内置兜底语料（仅用于验证管线，不代表真实效果）")
+    return FALLBACK_CORPUS
 
 
 class CharDataset:

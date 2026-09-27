@@ -22,7 +22,7 @@ import torch
 import torch.nn.functional as F
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", "02_模型"))
-from model import GPT   # noqa: E402
+from model import GPT, GPTConfig   # noqa: E402
 
 
 @torch.no_grad()
@@ -70,7 +70,11 @@ def main():
     if args.device == "mps" and not torch.backends.mps.is_available():
         args.device = "cpu"
 
-    ck = torch.load(args.ckpt, map_location=args.device)
+    # PyTorch ≥2.6 起 torch.load 默认 weights_only=True，自定义 dataclass（GPTConfig）
+    # 不在默认白名单里，会抛 UnpicklingError。正确做法是把它「加进安全白名单」，
+    # 而不是图省事设置 weights_only=False（那等于允许 checkpoint 执行任意代码）。
+    torch.serialization.add_safe_globals([GPTConfig])
+    ck = torch.load(args.ckpt, map_location=args.device, weights_only=True)
     model = GPT(ck["config"]).to(args.device)
     model.load_state_dict(ck["model"])
     stoi, itos = ck["stoi"], {i: c for c, i in ck["stoi"].items()}

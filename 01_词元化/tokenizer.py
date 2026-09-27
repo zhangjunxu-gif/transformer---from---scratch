@@ -53,11 +53,19 @@ class SimpleBPE:
         self.num_merges = num_merges
         self.merges: dict[tuple[str, str], str] = {}
         self.vocab: list[str] = []
+        # 两个特殊 token 固定排在词表开头，保证 id 稳定（<unk> 必须是 0）
+        self.unk_token = "<unk>"
+        self.word_end = "</w>"
+        self.special_tokens = [self.unk_token, self.word_end]
 
     def train(self, text: str) -> None:
         words = text.split()
-        seqs = [list(w) + ["</w>"] for w in words]   # </w> 防止跨词合并
-        self.vocab = sorted(set("".join("".join(s) for s in seqs)))
+        seqs = [list(w) + [self.word_end] for w in words]   # </w> 防止跨词合并
+        # 注意：只从「真实字符」建词表。若把 "</w>" 直接拼进字符串再 set()，
+        # 会把它拆成 '<' '>' '/' 'w' 四个字符污染词表，且 '/' 排序后会落在 id 0，
+        # 导致所有未登录 token 静默变成 '/' —— 这是教学实现里最隐蔽的一个坑。
+        chars = sorted({c for w in words for c in w})
+        self.vocab = self.special_tokens + chars
 
         for _ in range(self.num_merges):
             pairs: Counter = Counter()
@@ -86,14 +94,16 @@ class SimpleBPE:
                 new_seqs.append(out)
             seqs = new_seqs
 
-        self.vocab = sorted(set(self.vocab))
+        # 去重，但保持特殊 token 固定在词表开头（id 0/1 稳定）
+        learned = [t for t in self.vocab if t not in self.special_tokens]
+        self.vocab = self.special_tokens + sorted(set(learned))
         self.stoi = {t: i for i, t in enumerate(self.vocab)}
         self.itos = {i: t for t, i in self.stoi.items()}
 
     def encode_word(self, word: str) -> list[str]:
         """按合并规则的习得顺序（rank）贪心应用"""
         merge_order = list(self.merges.keys())
-        seq = list(word) + ["</w>"]
+        seq = list(word) + [self.word_end]
         while True:
             best_pair, best_rank = None, None
             for i in range(len(seq) - 1):
@@ -118,14 +128,17 @@ class SimpleBPE:
 
     def encode(self, text: str) -> list[int]:
         ids: list[int] = []
+        unk = self.stoi[self.unk_token]
         for w in text.split():
             for tok in self.encode_word(w):
-                ids.append(self.stoi.get(tok, 0))
+                # 未登录 token 显式落到 <unk>(id 0)，绝不能静默复用某个真实字符的 id
+                ids.append(self.stoi.get(tok, unk))
         return ids
 
     def decode(self, ids: Iterable[int]) -> str:
         toks = [self.itos[i] for i in ids]
-        return "".join(toks).replace("</w>", " ").strip()
+        out = "".join(toks).replace(self.word_end, " ")
+        return " ".join(out.split())   # 折叠多余空白
 
 
 if __name__ == "__main__":
@@ -136,7 +149,9 @@ if __name__ == "__main__":
     print("学到的合并（前 10）:", list(tok.merges.items())[:10])
     ids = tok.encode("the quick brown fox")
     print("编码:", ids)
-    print("解码:", tok.decode(ids))
+    print("解码:", repr(tok.decode(ids)))
+    assert tok.decode(ids) == "the quick brown fox", "BPE 往返不一致"
+    print("[PASS] BPE encode/decode 往返一致")
 
     c = CharTokenizer(demo)
     print("\n字符级词表:", c.vocab_size, "| roundtrip:", c.decode(c.encode("hello")) == "hello")
